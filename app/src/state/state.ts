@@ -1,6 +1,6 @@
-import { proxy } from "valtio";
-import { SIZE } from "../constants/sizeGame";
-import gameWsService from "../services/connect";
+import { proxy } from 'valtio';
+import { SIZE } from '../constants/sizeGame';
+import gameWsService from '../services/connect';
 
 interface AppState {
   hoveredItem: string | null;
@@ -23,7 +23,7 @@ export const appState = proxy<AppState>({
   hoveredItem: null,
   showJoinModal: false,
   showSettingsModal: false,
-  joinCode: "",
+  joinCode: '',
   musicVolume: 75,
   soundVolume: 80,
   useMouseKeyboard: true,
@@ -64,10 +64,10 @@ export const actions = {
   setUseMouseKeyboard: (use: boolean) => {
     appState.useMouseKeyboard = use;
   },
-  
+
   setSize: (size: SIZE) => {
     appState.size = size;
-    appState.changeSize = false;
+    // appState.changeSize = false;
   },
 
   changeSizeGame: (value: boolean) => {
@@ -93,17 +93,17 @@ export const actions = {
 
   handleMenuClick: (itemId: string, event?: React.MouseEvent) => {
     // If it's a right-click on the Start button, show context menu instead
-    if (itemId === "start" && event && event.type === "contextmenu") {
+    if (itemId === 'start' && event && event.type === 'contextmenu') {
       event.preventDefault();
       actions.openContextMenu(event.clientX, event.clientY);
       return;
     }
 
-    if (itemId === "join") {
+    if (itemId === 'join') {
       appState.showJoinModal = true;
-    } else if (itemId === "settings") {
+    } else if (itemId === 'settings') {
       appState.showSettingsModal = true;
-    } else if (itemId === "start" && event) {
+    } else if (itemId === 'start' && event) {
       event.preventDefault();
       actions.openContextMenu(event.clientX, event.clientY);
     } else {
@@ -115,16 +115,16 @@ export const actions = {
     e.preventDefault();
     if (appState.joinCode.trim()) {
       console.log(`Joining game with code: ${appState.joinCode}`);
-      
+
       gameWsService.joinGame(appState.joinCode);
       appState.showJoinModal = false;
-      appState.joinCode = "";
+      appState.joinCode = '';
     }
   },
 
   closeModal: () => {
     appState.showJoinModal = false;
     appState.showSettingsModal = false;
-    appState.joinCode = "";
+    appState.joinCode = '';
   },
 };

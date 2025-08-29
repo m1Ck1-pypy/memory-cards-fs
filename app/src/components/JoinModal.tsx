@@ -3,18 +3,9 @@ import { Users, X, Hash } from 'lucide-react';
 import ModalContainer from './ModalContainer';
 import { useSnapshot } from 'valtio';
 import { appState, actions } from '../state/state';
-import { useNavigate } from 'react-router-dom';
 
 const JoinModal: React.FC = () => {
-  const navigate = useNavigate();
   const snap = useSnapshot(appState);
-
-  const onSubmit = (e: React.FormEvent) => {
-    actions.handleJoinSubmit(e);
-    console.log(snap.joinCode);
-
-    navigate(`/game/${snap.joinCode}`);
-  };
 
   return (
     <ModalContainer onClose={actions.closeModal}>
@@ -34,7 +25,7 @@ const JoinModal: React.FC = () => {
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className='p-6'>
+        <form onSubmit={(e) => actions.handleJoinSubmit(e)} className='p-6'>
           <div className='mb-6'>
             <label
               htmlFor='joinCode'
@@ -50,9 +41,7 @@ const JoinModal: React.FC = () => {
                 type='text'
                 id='joinCode'
                 value={snap.joinCode}
-                onChange={(e) =>
-                  actions.setJoinCode(e.target.value.toUpperCase())
-                }
+                onChange={(e) => actions.setJoinCode(e.target.value)}
                 placeholder='Enter game code'
                 className='w-full pl-12 pr-4 py-3 bg-slate-700/50 border border-white/20 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200'
                 maxLength={8}

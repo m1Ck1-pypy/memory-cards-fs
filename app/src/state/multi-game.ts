@@ -1,6 +1,6 @@
-import { proxy } from "valtio";
-import { SIZE, VALUE_SIZE } from "../constants/sizeGame";
-import { appState } from "./state";
+import { proxy } from 'valtio';
+import { SIZE, VALUE_SIZE } from '../constants/sizeGame';
+import { appState } from './state';
 
 export interface MultiCard {
   id: number;
@@ -21,13 +21,13 @@ export interface MultiPlayerGameState {
   timeLeft: number;
   gameOver: boolean;
   gameStarted: boolean;
-  winner: 1 | 2 | null | "draw"; // Победитель или ничья
+  winner: 1 | 2 | null | 'draw'; // Победитель или ничья
   changeSize: boolean;
   size: SIZE;
 }
 
 export const multiGameState = proxy<MultiPlayerGameState>({
-  roomId: "",
+  roomId: '',
   cards: [],
   flippedCards: [],
   playerScores: [0, 0],
@@ -43,8 +43,8 @@ export const multiGameState = proxy<MultiPlayerGameState>({
 export const multiGameActions = {
   // Генерация ID комнаты
   generateRoomId: () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let result = "";
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
     for (let i = 0; i < 7; i++) {
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
@@ -90,6 +90,9 @@ export const multiGameActions = {
     multiGameState.gameOver = false;
     multiGameState.gameStarted = false;
     multiGameState.winner = null;
+
+    // console.log('🚀 ~ multiGameState.roomId:', multiGameState.roomId);
+    // gameProxy.joinGame(multiGameState.roomId);
   },
 
   // Начало игры
@@ -201,7 +204,7 @@ export const multiGameActions = {
     } else if (player2Score > player1Score) {
       multiGameState.winner = 2;
     } else {
-      multiGameState.winner = "draw";
+      multiGameState.winner = 'draw';
     }
   },
 
@@ -211,7 +214,7 @@ export const multiGameActions = {
     playerScores: [number, number];
     currentPlayer: 1 | 2;
     gameOver: boolean;
-    winner?: 1 | 2 | "draw" | null;
+    winner?: 1 | 2 | 'draw' | null;
   }) => {
     multiGameState.cards = gameData.cards;
     multiGameState.playerScores = gameData.playerScores;

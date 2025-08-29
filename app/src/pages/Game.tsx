@@ -1,16 +1,15 @@
 import { useEffect } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import EndGameModal from '../components/Game/EndGameModal';
 // import InstructionGame from "../components/Game/InstructionGame";
 import { useSnapshot } from 'valtio';
 import { gameActions, gameState } from '../state/game';
 import SelectFieldModal from '../components/Game/SelectFieldModal';
 import SingleGame from '../components/Game/SingleGame';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import MultiGame from '../components/Game/MutliGame';
 import { actions, appState } from '../state/state';
 import { multiGameActions, multiGameState } from '../state/multi-game';
-import { ArrowLeft } from 'lucide-react';
-import { gameProxy } from '../state/ws';
 
 const GamePage = () => {
   const snap_app = useSnapshot(appState);
@@ -20,9 +19,8 @@ const GamePage = () => {
   const location = useLocation();
   const players: number = location.state?.players || 1;
 
-  const params = useParams();
-  const gameId = params.gameId;
-  console.log('🚀 ~ gameId:', gameId);
+  // const params = useParams();
+  // const gameId = params.gameId;
 
   useEffect(() => {
     return () => {
@@ -47,13 +45,13 @@ const GamePage = () => {
         <ArrowLeft className='w-5 h-5' />
         <span>Back to Menu</span>
       </button>
-      {snap_app?.changeSize && !gameId && (
+      {snap_app?.changeSize && (
         <SelectFieldModal players={players} />
       )}
 
       {players == 1 && !snap_app?.changeSize && <SingleGame />}
 
-      {((players == 2 && !snap_app?.changeSize) || gameId) && <MultiGame />}
+      {(players == 2 && !snap_app?.changeSize) && <MultiGame />}
 
       {/* Game instructions */}
       {/*{!snap.changeSize && <InstructionGame gameStarted={snap.gameStarted} />}*/}

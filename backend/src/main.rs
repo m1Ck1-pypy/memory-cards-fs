@@ -16,7 +16,8 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[ts(export)]
 pub struct Card {
     pub id: u8,
     pub value: u8,
@@ -24,13 +25,15 @@ pub struct Card {
     pub matched: bool,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, TS)]
+#[ts(export)]
 pub struct Player {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug, TS)]
+#[ts(export)]
 pub struct GameState {
     pub cards: Vec<Card>,
     pub players: (Player, Option<Player>), // player1, player2
@@ -62,9 +65,12 @@ pub enum ClientMessage {
 #[derive(Serialize, Clone)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
-    GameCreated { room_id: String },
+    GameCreated { 
+        room_id: String,
+        player_id: String 
+    },
     // RoomJoined { state: GameState },
-    GameJoined { room_id: String, player_id: String, players: u8 },
+    GameJoined { state: GameState },
     GameStateUpdate { state: GameState },
     GameStarted { timer: u16 },
     GameOver { winner: String, scores: (u8, u8) },
@@ -258,8 +264,10 @@ async fn handle_client_message(
             let room_id_clone = room.id.clone();
             rooms.insert(room.id.clone(), room);
             *room_id = Some(room_id_clone.clone());
+            println!("room_id_clone {room_id_clone}");
             let _ = sender.send(ServerMessage::GameCreated {
                 room_id: room_id_clone,
+                player_id: player_id.to_string()
             });
         }
 
@@ -278,11 +286,12 @@ async fn handle_client_message(
                     });
                     room.sockets.push(sender.clone());
                     *room_id = Some(rid.clone());
+                    println!("STATE: {:?}", room.state.clone());
                     let _ = sender.send(ServerMessage::GameJoined {
-                        // state: room.state.clone(),
-                        player_id: player_id.clone(),
-                        players: 2,
-                        room_id: rid.clone(),
+                        state: room.state.clone(),
+                        // player_id: player_id.clone(),
+                        // players: 2,
+                        // room_id: rid.clone(),
                     });
                     broadcast(
                         &room.sockets,

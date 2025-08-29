@@ -1,12 +1,14 @@
+import type { GameState } from '../../../backend/bindings/GameState';
+
 export type MessageType =
-  | "GameJoined"
-  | "GameCreated"
-  | "PlayerJoined"
-  | "GameStarted"
-  | "CardFlipped"
-  | "GameUpdated"
-  | "GameEnded"
-  | "Error";
+  | 'GameJoined'
+  | 'GameCreated'
+  | 'PlayerJoined'
+  | 'GameStarted'
+  | 'CardFlipped'
+  | 'GameUpdated'
+  | 'GameEnded'
+  | 'Error';
 
 export interface ServerMessage {
   type: MessageType;
@@ -14,22 +16,23 @@ export interface ServerMessage {
 
 // Игрок присоединился к игре
 export interface MessageGameJoined extends ServerMessage {
-  type: "GameJoined";
-  roomId: string;
-  playerId: number; // 1 или 2
-  players: number; // количество игроков в комнате
+  type: 'GameJoined';
+  state: GameState;
+  // roomId: string;
+  // playerId: number; // 1 или 2
+  // players: number; // количество игроков в комнате
 }
 
 // Игра создана
 export interface MessageGameCreated extends ServerMessage {
-  type: "GameCreated";
+  type: 'GameCreated';
   room_id: string;
-  playerId: number; // создатель всегда игрок 1
+  player_id: number; // создатель всегда игрок 1
 }
 
 // Второй игрок подключился
 export interface MessagePlayerJoined extends ServerMessage {
-  type: "PlayerJoined";
+  type: 'PlayerJoined';
   roomId: string;
   playerId: number; // который подключился
   players: number; // общее количество игроков
@@ -37,14 +40,14 @@ export interface MessagePlayerJoined extends ServerMessage {
 
 // Игра началась
 export interface MessageGameStarted extends ServerMessage {
-  type: "GameStarted";
+  type: 'GameStarted';
   roomId: string;
   currentPlayer: 1 | 2;
 }
 
 // Карта перевернута
 export interface MessageCardFlipped extends ServerMessage {
-  type: "CardFlipped";
+  type: 'CardFlipped';
   roomId: string;
   cardIndex: number;
   playerId: number;
@@ -53,25 +56,25 @@ export interface MessageCardFlipped extends ServerMessage {
 
 // Обновление состояния игры
 export interface MessageGameUpdated extends ServerMessage {
-  type: "GameUpdated";
+  type: 'GameUpdated';
   roomId: string;
   cards: any[]; // массив карт
   playerScores: [number, number];
   currentPlayer: 1 | 2;
   gameOver: boolean;
-  winner?: 1 | 2 | "draw" | null;
+  winner?: 1 | 2 | 'draw' | null;
 }
 
 // Игра закончена
 export interface MessageGameEnded extends ServerMessage {
-  type: "GameEnded";
+  type: 'GameEnded';
   roomId: string;
-  winner: 1 | 2 | "draw";
+  winner: 1 | 2 | 'draw';
   playerScores: [number, number];
 }
 
 export interface MessageError extends ServerMessage {
-  type: "Error";
+  type: 'Error';
   message: string;
   roomId?: string;
 }
@@ -88,28 +91,28 @@ export type IncomingMessage =
 
 // Клиентские сообщения
 export interface ClientCreateGame {
-  type: "CreateGame";
+  type: 'CreateGame';
   // room_id: string;
 }
 
 export interface ClientJoinGame {
-  type: "JoinGame";
+  type: 'JoinGame';
   room_id: string;
 }
 
 export interface ClientStartGame {
-  type: "StartGame";
+  type: 'StartGame';
   roomId: string;
 }
 
 export interface ClientFlipCard {
-  type: "FlipCard";
+  type: 'FlipCard';
   roomId: string;
   cardIndex: number;
 }
 
 export interface ClientRestartGame {
-  type: "RestartGame";
+  type: 'RestartGame';
   roomId: string;
 }
 
@@ -150,7 +153,7 @@ class GameWebSocketService {
   }
 
   static getInstance(
-    url: string = "ws://localhost:3001/ws",
+    url: string = 'ws://localhost:3001/ws',
   ): GameWebSocketService {
     if (!GameWebSocketService.instance) {
       GameWebSocketService.instance = new GameWebSocketService(url);
@@ -200,9 +203,9 @@ class GameWebSocketService {
   /**
    * Создать новую игру
    */
-  createGame(): void {
+  async createGame(): Promise<void> {
     const message: ClientCreateGame = {
-      type: "CreateGame",
+      type: 'CreateGame',
     };
     // this.currentRoomId = roomId;
     this.send(message);
@@ -213,7 +216,7 @@ class GameWebSocketService {
    */
   joinGame(roomId: string): void {
     const message: ClientJoinGame = {
-      type: "JoinGame",
+      type: 'JoinGame',
       room_id: roomId,
     };
     this.currentRoomId = roomId;
@@ -227,7 +230,7 @@ class GameWebSocketService {
     if (!this.currentRoomId) return;
 
     const message: ClientStartGame = {
-      type: "StartGame",
+      type: 'StartGame',
       roomId: this.currentRoomId,
     };
     this.send(message);
@@ -240,7 +243,7 @@ class GameWebSocketService {
     if (!this.currentRoomId) return;
 
     const message: ClientFlipCard = {
-      type: "FlipCard",
+      type: 'FlipCard',
       roomId: this.currentRoomId,
       cardIndex,
     };
@@ -254,7 +257,7 @@ class GameWebSocketService {
     if (!this.currentRoomId) return;
 
     const message: ClientRestartGame = {
-      type: "RestartGame",
+      type: 'RestartGame',
       roomId: this.currentRoomId,
     };
     this.send(message);
@@ -265,7 +268,7 @@ class GameWebSocketService {
   getCurrentRoomId(): string | null {
     return this.currentRoomId;
   }
-  
+
   setCurrentRoomId(roomId: string): void {
     this.currentRoomId = roomId;
   }
@@ -297,11 +300,11 @@ class GameWebSocketService {
     this.socket = new WebSocket(this.url);
 
     this.socket.onopen = () => {
-      console.log("✅ WebSocket connected");
+      console.log('✅ WebSocket connected');
       this.reconnectAttempts = 0;
       this.isConnecting = false;
       this.flushQueue(); // отправляем отложенные сообщения
-      this.emit("open");
+      this.emit('open');
     };
 
     this.socket.onmessage = (event) => {
@@ -309,15 +312,15 @@ class GameWebSocketService {
         const data = JSON.parse(event.data);
         this.emit(data.type, data);
       } catch (err) {
-        console.error("Failed to parse message", err);
+        console.error('Failed to parse message', err);
       }
     };
 
     this.socket.onclose = (event) => {
-      console.log("❌ WebSocket closed", event);
+      console.log('❌ WebSocket closed', event);
       this.socket = null;
       this.isConnecting = false;
-      this.emit("close", event);
+      this.emit('close', event);
 
       // Попытка переподключения
       if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -328,8 +331,8 @@ class GameWebSocketService {
     };
 
     this.socket.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      this.emit("Error", { message: "Connection error" });
+      console.error('WebSocket error:', error);
+      this.emit('Error', { message: 'Connection error' });
     };
   }
 
