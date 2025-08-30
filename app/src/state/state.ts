@@ -86,7 +86,6 @@ export const actions = {
 
   selectContextMenuOption: (option: string) => {
     appState.contextMenu.selectedOption = option;
-    console.log(`Selected: ${option}`);
     // Add your logic here for what happens when an option is selected
     appState.contextMenu.isOpen = false;
   },

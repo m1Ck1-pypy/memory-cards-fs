@@ -9,7 +9,6 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use serde_json::Number;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,7 +25,7 @@ pub struct Card {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, TS)]
-#[ts(export)]
+#[ts(export, export_to = "../../app/types/")]
 pub struct Player {
     pub id: String,
     pub name: String,
@@ -69,9 +68,16 @@ pub enum ServerMessage {
         room_id: String,
         player_id: String 
     },
-    // RoomJoined { state: GameState },
-    GameJoined { state: GameState },
-    GameStateUpdate { state: GameState },
+    GameJoined { 
+        state: GameState, 
+        room_id: String,
+        player_id: String  
+    },
+    GameStateUpdate { 
+        state: GameState, 
+        player_id: Option<String>, 
+        room_id: Option<String> 
+    },
     GameStarted { timer: u16 },
     GameOver { winner: String, scores: (u8, u8) },
     PlayerLeft,
@@ -144,7 +150,8 @@ impl Room {
         const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         let mut id = String::with_capacity(LEN);
         for _ in 0..LEN {
-            let random_index = fastrand::usize(0..LEN);
+            // let random_index = fastrand::usize(0..LEN);
+            let random_index = fastrand::usize(0..CHARS.len());
             id.push(CHARS[random_index] as char);
         }
 
@@ -191,7 +198,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Обработка сокета
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel::<ServerMessage>();
     let mut room_id: Option<String> = None;
-    let player_id = String::from("1");
+    let player_id = uuid::Uuid::new_v4().to_string();
+    // let player_id = String::from("1");
 
     let send_task = tokio::spawn(async move {
         let mut receiver = receiver;
@@ -262,17 +270,17 @@ async fn handle_client_message(
             let mut rooms = state.rooms.lock().await;
             let room = Room::new(player_id.clone());
             let room_id_clone = room.id.clone();
+            println!("room {:?}", room);
             rooms.insert(room.id.clone(), room);
             *room_id = Some(room_id_clone.clone());
-            println!("room_id_clone {room_id_clone}");
             let _ = sender.send(ServerMessage::GameCreated {
                 room_id: room_id_clone,
-                player_id: player_id.to_string()
+                player_id: player_id.clone()
             });
         }
 
         ClientMessage::JoinGame { room_id: rid } => {
-            println!("{rid}");
+            println!("join: {rid}");
             let mut rooms = state.rooms.lock().await;
             if let Some(room) = rooms.get_mut(&rid) {
                 if room.state.players.1.is_some() {
@@ -289,14 +297,16 @@ async fn handle_client_message(
                     println!("STATE: {:?}", room.state.clone());
                     let _ = sender.send(ServerMessage::GameJoined {
                         state: room.state.clone(),
-                        // player_id: player_id.clone(),
+                        player_id: player_id.clone(),
+                        room_id: rid.clone(),
                         // players: 2,
-                        // room_id: rid.clone(),
                     });
                     broadcast(
                         &room.sockets,
                         ServerMessage::GameStateUpdate {
                             state: room.state.clone(),
+                            room_id: Some(rid.clone()),
+                            player_id: Some(player_id.clone())
                         },
                     );
                 }
@@ -324,6 +334,7 @@ async fn handle_client_message(
                 let mut game_state = room.state.clone();
                 let sockets = room.sockets.clone();
 
+                let player_id = player_id.clone();
                 let game_task = tokio::spawn(async move {
                     let mut timer = 60;
                     loop {
@@ -338,6 +349,8 @@ async fn handle_client_message(
                             &sockets,
                             ServerMessage::GameStateUpdate {
                                 state: game_state.clone(),
+                                room_id: None,
+                                player_id: None
                             },
                         );
 
@@ -429,6 +442,8 @@ async fn handle_client_message(
                                         &room.sockets,
                                         ServerMessage::GameStateUpdate {
                                             state: room.state.clone(),
+                                            room_id: None,
+                                            player_id: None
                                         },
                                     );
                                 }
@@ -460,6 +475,8 @@ async fn handle_client_message(
                             &room.sockets,
                             ServerMessage::GameStateUpdate {
                                 state: room.state.clone(),
+                                room_id: None,
+                                player_id: None
                             },
                         );
                     }
@@ -471,7 +488,8 @@ async fn handle_client_message(
 
 fn broadcast(senders: &[tokio::sync::mpsc::UnboundedSender<ServerMessage>], msg: ServerMessage) {
     for sender in senders {
-        let _ = sender.send(msg.clone());
+        let _ = sender.send(msg.clone()).is_ok();
+        // senders.retain(|s| s.send(msg.clone()).is_ok());
     }
 }
 

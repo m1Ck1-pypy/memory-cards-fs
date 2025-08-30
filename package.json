@@ -8,7 +8,7 @@
     "dev-backend": "cd ./backend && cargo watch -x run",
     "build-app": "",
     "build-backend": "cd ./backend && cargo build --release",
-    "typegen": "cd ./backend && cargo test"
+    "typegen": "cd ./backend && cargo test export_bindings"
   },
   "devDependencies": {
     "@types/bun": "latest"

@@ -6,7 +6,7 @@ import { useSnapshot } from 'valtio';
 import { gameActions, gameState } from '../state/game';
 import SelectFieldModal from '../components/Game/SelectFieldModal';
 import SingleGame from '../components/Game/SingleGame';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import MultiGame from '../components/Game/MutliGame';
 import { actions, appState } from '../state/state';
 import { multiGameActions, multiGameState } from '../state/multi-game';
@@ -19,14 +19,18 @@ const GamePage = () => {
   const location = useLocation();
   const players: number = location.state?.players || 1;
 
-  // const params = useParams();
-  // const gameId = params.gameId;
+  const params = useParams();
+  const gameId = params.gameId;
 
   useEffect(() => {
+    if (gameId) {
+      actions.changeSizeGame(false);
+    }
+
     return () => {
       actions.changeSizeGame(true);
     };
-  }, [players]);
+  }, [players, gameId]);
 
   const onModalClose = () => {
     if (players === 1) {
@@ -45,13 +49,13 @@ const GamePage = () => {
         <ArrowLeft className='w-5 h-5' />
         <span>Back to Menu</span>
       </button>
-      {snap_app?.changeSize && (
+      {snap_app?.changeSize && !gameId && (
         <SelectFieldModal players={players} />
       )}
 
       {players == 1 && !snap_app?.changeSize && <SingleGame />}
 
-      {(players == 2 && !snap_app?.changeSize) && <MultiGame />}
+      {players == 2 && !snap_app?.changeSize && <MultiGame />}
 
       {/* Game instructions */}
       {/*{!snap.changeSize && <InstructionGame gameStarted={snap.gameStarted} />}*/}

@@ -1,6 +1,7 @@
 import { proxy } from 'valtio';
-import { SIZE, VALUE_SIZE } from '../constants/sizeGame';
+import { VALUE_SIZE } from '../constants/sizeGame';
 import { appState } from './state';
+import type { GamePlayer } from './ws';
 
 export interface MultiCard {
   id: number;
@@ -22,8 +23,9 @@ export interface MultiPlayerGameState {
   gameOver: boolean;
   gameStarted: boolean;
   winner: 1 | 2 | null | 'draw'; // Победитель или ничья
-  changeSize: boolean;
-  size: SIZE;
+  playerId: string; // UUID игрока
+  players: GamePlayer[];
+  playersCount: number;
 }
 
 export const multiGameState = proxy<MultiPlayerGameState>({
@@ -36,29 +38,23 @@ export const multiGameState = proxy<MultiPlayerGameState>({
   gameOver: false,
   gameStarted: false,
   winner: null,
-  changeSize: true,
-  size: SIZE.SMALL,
+  playerId: '',
+  players: [],
+  playersCount: 0
 });
 
 export const multiGameActions = {
   // Генерация ID комнаты
-  generateRoomId: () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < 7; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    multiGameState.roomId = result;
-    return result;
+  setRoomId: (room_id: string) => {
+    multiGameState.roomId = room_id;
   },
 
-  setSize: (size: SIZE) => {
-    multiGameState.size = size;
-    multiGameState.changeSize = false;
+  setPlayerId: (player_id: string) => {
+    multiGameState.playerId = player_id;
   },
 
-  changeSizeGame: (value: boolean) => {
-    multiGameState.changeSize = value;
+  getCurrentPlayer: () => {
+    return multiGameState.currentPlayer;
   },
 
   // Инициализация игры
@@ -209,19 +205,23 @@ export const multiGameActions = {
   },
 
   // Обновление состояния игры из WebSocket
-  updateGameFromServer: (gameData: {
+  updateGameFromServer: (data: {
     cards: MultiCard[];
     playerScores: [number, number];
     currentPlayer: 1 | 2;
     gameOver: boolean;
     winner?: 1 | 2 | 'draw' | null;
+    roomId: string;
+    playerId: string;
   }) => {
-    multiGameState.cards = gameData.cards;
-    multiGameState.playerScores = gameData.playerScores;
-    multiGameState.currentPlayer = gameData.currentPlayer;
-    multiGameState.gameOver = gameData.gameOver;
-    if (gameData.winner !== undefined) {
-      multiGameState.winner = gameData.winner;
+    multiGameState.cards = data.cards;
+    multiGameState.playerScores = data.playerScores;
+    multiGameState.currentPlayer = data.currentPlayer;
+    multiGameState.gameOver = data.gameOver;
+    multiGameState.roomId = data.roomId;
+    multiGameState.playerId = data.playerId;
+    if (data.winner !== undefined) {
+      multiGameState.winner = data.winner;
     }
   },
 

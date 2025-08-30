@@ -1,73 +1,104 @@
 import { proxy } from 'valtio';
 import gameWsService from '../services/connect';
 import { multiGameActions, multiGameState } from './multi-game';
-import type {
-  MessageGameCreated,
-  MessageGameJoined,
-  MessagePlayerJoined,
-  MessageGameStarted,
-  MessageCardFlipped,
-  MessageGameUpdated,
-  MessageGameEnded,
-  MessageError,
-} from '../services/connect';
 
-interface GamePlayer {
-  id: number;
+// Исправленные типы — соответствуют серверу
+interface MessageGameCreated {
+  type: 'GameCreated';
+  room_id: string;
+  player_id: string; // UUID, не number!
+}
+
+interface MessageGameJoined {
+  type: 'GameJoined';
+  state: {
+    players: {
+      0: { id: string; name: string };
+      1?: { id: string; name: string };
+    };
+    current_turn: string;
+    cards: Array<{
+      id: number;
+      value: number;
+      isFlipped: boolean;
+      isMatched: boolean;
+      flippedBy: number | null;
+    }>;
+    scores: [number, number];
+    timer: number;
+    status: 'Waiting' | 'Playing' | 'Finished';
+    winner: string | null;
+  };
+  room_id: string;
+  player_id: string;
+}
+
+interface MessageGameStateUpdate {
+  type: 'GameStateUpdate';
+  state: MessageGameJoined['state'];
+  player_id: MessageGameJoined['player_id']; // UUID
+  room_id: MessageGameJoined['room_id'];
+}
+
+interface MessageGameOver {
+  type: 'GameOver';
+  winner: string; // player_id or "draw"
+  scores: [number, number];
+}
+
+interface MessageError {
+  type: 'Error';
+  message: string;
+}
+
+export interface GamePlayer {
+  id: number; // локальный ID: 1 или 2
+  playerId: string; // UUID
   isConnected: boolean;
 }
 
 interface GameState {
-  // Состояние подключения
   isConnected: boolean;
   isConnecting: boolean;
 
-  // Игровая комната
   roomId: string | null;
-  playerId: number | null; // 1 или 2
-  players: GamePlayer[];
-  playersCount: number;
+  playerId: string | null; // UUID
 
-  // Игровые действия
+  // Действия
   createGame: () => void;
-  joinGame: (roomId: string) => Promise<void>;
+  joinGame: (roomId: string) => void;
   startGame: () => void;
   flipCard: (cardIndex: number) => void;
-  restartGame: () => void;
 
-  // Состояние ошибок
   error: string | null;
   clearError: () => void;
 }
 
 export const gameProxy = proxy<GameState>({
-  // Состояние подключения
   isConnected: false,
   isConnecting: false,
 
-  // Игровая комната
   roomId: null,
   playerId: null,
-  players: [],
-  playersCount: 0,
 
-  // Игровые действия
   createGame() {
+    gameProxy.clearError();
     gameProxy.error = null;
     gameWsService.createGame();
   },
 
-  async joinGame(roomId: string) {
+  joinGame(roomId: string) {
+    gameProxy.clearError();
     gameProxy.error = null;
     gameWsService.joinGame(roomId);
   },
 
   startGame() {
-    if (gameProxy.playerId !== 1) {
+    if (multiGameState.playerId !== '1') {
       gameProxy.error = 'Только создатель игры может начать игру';
       return;
     }
-    if (gameProxy.playersCount < 2) {
+    if (multiGameState.playersCount < 2) {
       gameProxy.error = 'Ожидается второй игрок';
       return;
     }
@@ -78,24 +109,15 @@ export const gameProxy = proxy<GameState>({
     gameWsService.flipCard(cardIndex);
   },
 
-  restartGame() {
-    if (gameProxy.playerId !== 1) {
-      gameProxy.error = 'Только создатель игры может перезапустить игру';
-      return;
-    }
-    gameWsService.restartGame();
-  },
-
-  // Состояние ошибок
-  error: null,
   clearError() {
     gameProxy.error = null;
   },
+
+  error: null,
 });
 
 // Инициализация игрового WebSocket соединения
 export const initGameStore = () => {
-  // Состояние подключения
   const handleOpen = () => {
     gameProxy.isConnected = true;
     gameProxy.isConnecting = false;
@@ -105,104 +127,124 @@ export const initGameStore = () => {
   const handleClose = () => {
     gameProxy.isConnected = false;
     gameProxy.isConnecting = false;
-    // Сбрасываем состояние игры при отключении
+    // Сброс состояния
     gameProxy.roomId = null;
     gameProxy.playerId = null;
-    gameProxy.players = [];
-    gameProxy.playersCount = 0;
+    multiGameState.players = [];
+    multiGameState.playersCount = 0;
     console.log('🎮 Game WebSocket disconnected');
   };
 
-  // Отслеживаем попытки подключения
-  const connectionInterval = setInterval(() => {
-    const isConn = gameWsService.isConnected();
-    const isConnOrConnecting = gameWsService.isConnectingOrConnected();
-
-    if (!isConn && isConnOrConnecting && !gameProxy.isConnecting) {
-      gameProxy.isConnecting = true;
-    } else if (isConn && gameProxy.isConnecting) {
-      gameProxy.isConnecting = false;
-      gameProxy.isConnected = true;
-    }
-  }, 500);
-
-  // Обработчики игровых сообщений
   const handleGameCreated = (data: MessageGameCreated) => {
     console.log('🎮 Game created:', data);
 
-    multiGameState.roomId = data.room_id;
-    gameProxy.playerId = data.player_id;
-    gameProxy.players = [{ id: 1, isConnected: true }];
-    gameProxy.playersCount = 1;
+    multiGameState.players = [
+      { id: 1, playerId: data.player_id, isConnected: true },
+    ];
+    multiGameState.playersCount = 1;
 
-    gameWsService.setCurrentRoomId(data.room_id);
-    gameWsService.setCurrentPlayerId(data.player_id);
+    // multiGameState.playerId = data.player_id;
+    // multiGameState.roomId = data.room_id;
+
+    // Сохраняем в multiGame, если нужно
+    multiGameActions.setRoomId(data.room_id);
+    multiGameActions.setPlayerId(data.player_id);
   };
 
   const handleGameJoined = (data: MessageGameJoined) => {
     console.log('🎮 Game joined:', data);
-    console.log(multiGameState);
 
-    // gameProxy.roomId = data.state;
-    // gameProxy.playerId = data.playerId;
-    // gameProxy.playersCount = data.players;
-    // gameWsService.setCurrentPlayerId(data.playerId);
+    const state = data.state;
+    // const localPlayerId = gameWsService.getCurrentPlayerId(); // если хранится
 
-    // // Обновляем список игроков
-    // gameProxy.players = [];
-    // for (let i = 1; i <= data.players; i++) {
-    //   gameProxy.players.push({ id: i, isConnected: true });
-    // }
-  };
+    gameProxy.roomId = data.room_id;
+    gameProxy.playerId = data.player_id;
+    // gameProxy.playerId = ??? — нужно передать извне
 
-  const handlePlayerJoined = (data: MessagePlayerJoined) => {
-    console.log('🎮 Player joined:', data);
-    gameProxy.playersCount = data.players;
+    multiGameActions.setRoomId(data.room_id);
+    // multiGameActions.setPlayerId(data.player_id); // передаем извне
 
-    // Обновляем список игроков
-    gameProxy.players = [];
-    for (let i = 1; i <= data.players; i++) {
-      gameProxy.players.push({ id: i, isConnected: true });
+    const players: GamePlayer[] = [];
+    let count = 0;
+
+    if (state.players[0]) {
+      players.push({ id: 1, playerId: state.players[0].id, isConnected: true });
+      count++;
     }
-  };
+    if (state.players[1]) {
+      players.push({ id: 2, playerId: state.players[1].id, isConnected: true });
+      count++;
+    }
 
-  const handleGameStarted = (data: MessageGameStarted) => {
-    console.log('🎮 Game started:', data);
-    // Запускаем игру в локальном состоянии
-    multiGameActions.startGame();
-  };
+    multiGameState.players = players;
+    multiGameState.playersCount = count;
 
-  const handleCardFlipped = (data: MessageCardFlipped) => {
-    console.log('🎮 Card flipped:', data);
-    // Обновляем состояние карты из сервера
-    multiGameActions.updateCardFromServer(
-      data.cardIndex,
-      data.playerId,
-      data.currentPlayer,
-    );
-  };
-
-  const handleGameUpdated = (data: MessageGameUpdated) => {
-    console.log('🎮 Game updated:', data);
-    // Полное обновление игрового состояния
+    // Передаём состояние в локальную игру
     multiGameActions.updateGameFromServer({
-      cards: data.cards,
-      playerScores: data.playerScores,
-      currentPlayer: data.currentPlayer,
-      gameOver: data.gameOver,
-      winner: data.winner,
+      playerId: data.player_id,
+      roomId: data.room_id,
+      cards: state.cards,
+      playerScores: state.scores,
+      currentPlayer: state.current_turn === state.players[0]?.id ? 1 : 2,
+      gameOver: state.status === 'Finished',
+      winner: state.winner
+        ? state.winner === state.players[0]?.id
+          ? 1
+          : state.winner === state.players[1]?.id
+          ? 2
+          : 'draw'
+        : null,
     });
   };
 
-  const handleGameEnded = (data: MessageGameEnded) => {
-    console.log('🎮 Game ended:', data);
-    // Обновляем финальное состояние игры
+  const handleGameStateUpdate = (data: MessageGameStateUpdate) => {
+    console.log('🎮 Game state updated:', data);
+
+    const state = data.state;
+    const p1Id = state.players[0]?.id;
+    const p2Id = state.players[1]?.id;
+
     multiGameActions.updateGameFromServer({
+      playerId: data.player_id,
+      roomId: data.room_id,
+      cards: state.cards,
+      playerScores: state.scores,
+      currentPlayer: state.current_turn === p1Id ? 1 : 2,
+      gameOver: state.status === 'Finished',
+      winner: state.winner
+        ? state.winner === p1Id
+          ? 1
+          : state.winner === p2Id
+          ? 2
+          : 'draw'
+        : null,
+    });
+  };
+
+  const handleGameOver = (data: MessageGameOver) => {
+    console.log('🎮 Game over:', data);
+
+    const winner = data.winner;
+    const p1Id = multiGameActions.getCurrentPlayer(); // предположим, что знаем
+    const p2Id = multiGameState.players.find((p) => p.id === 2)?.playerId;
+
+    let winnerId: 1 | 2 | 'draw' | null = null;
+    if (winner === 'draw') {
+      winnerId = 'draw';
+    } else if (winner === p1Id.toString()) {
+      winnerId = 1;
+    } else if (winner === p2Id) {
+      winnerId = 2;
+    }
+
+    multiGameActions.updateGameFromServer({
+      playerId: '',
+      roomId: '',
       cards: [],
-      playerScores: data.playerScores,
+      playerScores: data.scores,
       currentPlayer: 1,
       gameOver: true,
-      winner: data.winner,
+      winner: winnerId,
     });
   };
 
@@ -211,30 +253,22 @@ export const initGameStore = () => {
     gameProxy.error = data.message;
   };
 
-  // Подписываемся на события
+  // Подписываемся только на реальные события
   gameWsService.on('open', handleOpen);
   gameWsService.on('close', handleClose);
   gameWsService.on('GameCreated', handleGameCreated);
   gameWsService.on('GameJoined', handleGameJoined);
-  gameWsService.on('PlayerJoined', handlePlayerJoined);
-  gameWsService.on('GameStarted', handleGameStarted);
-  gameWsService.on('CardFlipped', handleCardFlipped);
-  gameWsService.on('GameUpdated', handleGameUpdated);
-  gameWsService.on('GameEnded', handleGameEnded);
+  gameWsService.on('GameStateUpdate', handleGameStateUpdate);
+  gameWsService.on('GameOver', handleGameOver);
   gameWsService.on('Error', handleError);
 
-  // Возвращаем функцию очистки
   return () => {
     gameWsService.off('open', handleOpen);
     gameWsService.off('close', handleClose);
     gameWsService.off('GameCreated', handleGameCreated);
     gameWsService.off('GameJoined', handleGameJoined);
-    gameWsService.off('PlayerJoined', handlePlayerJoined);
-    gameWsService.off('GameStarted', handleGameStarted);
-    gameWsService.off('CardFlipped', handleCardFlipped);
-    gameWsService.off('GameUpdated', handleGameUpdated);
-    gameWsService.off('GameEnded', handleGameEnded);
+    gameWsService.off('GameStateUpdate', handleGameStateUpdate);
+    gameWsService.off('GameOver', handleGameOver);
     gameWsService.off('Error', handleError);
-    clearInterval(connectionInterval);
   };
 };

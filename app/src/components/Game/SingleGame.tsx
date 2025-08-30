@@ -22,8 +22,6 @@ const SingleGame = () => {
     return () => clearTimeout(timer);
   }, [snap.gameStarted, snap.gameOver, snap.timeLeft]);
 
-  console.log(snap.timeLeft);
-
   // Проверка завершения игры
   useEffect(() => {
     if (app.changeSize) return;

@@ -6,7 +6,7 @@ export type MessageType =
   | 'PlayerJoined'
   | 'GameStarted'
   | 'CardFlipped'
-  | 'GameUpdated'
+  | 'GameStateUpdate'
   | 'GameEnded'
   | 'Error';
 
@@ -14,85 +14,40 @@ export interface ServerMessage {
   type: MessageType;
 }
 
-// Игрок присоединился к игре
-export interface MessageGameJoined extends ServerMessage {
-  type: 'GameJoined';
-  state: GameState;
-  // roomId: string;
-  // playerId: number; // 1 или 2
-  // players: number; // количество игроков в комнате
-}
+// === Серверные сообщения ===
 
-// Игра создана
 export interface MessageGameCreated extends ServerMessage {
   type: 'GameCreated';
   room_id: string;
-  player_id: number; // создатель всегда игрок 1
+  player_id: string; // UUID
 }
 
-// Второй игрок подключился
-export interface MessagePlayerJoined extends ServerMessage {
-  type: 'PlayerJoined';
-  roomId: string;
-  playerId: number; // который подключился
-  players: number; // общее количество игроков
+export interface MessageGameJoined extends ServerMessage {
+  type: 'GameJoined';
+  state: GameState;
+  room_id: string;
+  player_id: string;
 }
 
-// Игра началась
-export interface MessageGameStarted extends ServerMessage {
-  type: 'GameStarted';
-  roomId: string;
-  currentPlayer: 1 | 2;
+export interface MessageGameStateUpdate extends ServerMessage {
+  type: 'GameStateUpdate';
+  state: GameState;
 }
 
-// Карта перевернута
-export interface MessageCardFlipped extends ServerMessage {
-  type: 'CardFlipped';
-  roomId: string;
-  cardIndex: number;
-  playerId: number;
-  currentPlayer: 1 | 2;
-}
-
-// Обновление состояния игры
-export interface MessageGameUpdated extends ServerMessage {
-  type: 'GameUpdated';
-  roomId: string;
-  cards: any[]; // массив карт
-  playerScores: [number, number];
-  currentPlayer: 1 | 2;
-  gameOver: boolean;
-  winner?: 1 | 2 | 'draw' | null;
-}
-
-// Игра закончена
 export interface MessageGameEnded extends ServerMessage {
   type: 'GameEnded';
-  roomId: string;
-  winner: 1 | 2 | 'draw';
-  playerScores: [number, number];
+  winner: string; // player_id or "draw"
+  scores: [number, number];
 }
 
 export interface MessageError extends ServerMessage {
   type: 'Error';
   message: string;
-  roomId?: string;
 }
-
-export type IncomingMessage =
-  | MessageGameJoined
-  | MessageGameCreated
-  | MessagePlayerJoined
-  | MessageGameStarted
-  | MessageCardFlipped
-  | MessageGameUpdated
-  | MessageGameEnded
-  | MessageError;
 
 // Клиентские сообщения
 export interface ClientCreateGame {
   type: 'CreateGame';
-  // room_id: string;
 }
 
 export interface ClientJoinGame {
@@ -102,26 +57,24 @@ export interface ClientJoinGame {
 
 export interface ClientStartGame {
   type: 'StartGame';
-  roomId: string;
+  room_id: string;
 }
 
 export interface ClientFlipCard {
   type: 'FlipCard';
-  roomId: string;
-  cardIndex: number;
+  room_id: string;
+  card_id: number;
 }
 
-export interface ClientRestartGame {
-  type: 'RestartGame';
-  roomId: string;
-}
+// ❌ RestartGame пока не реализовано на сервере
+// export interface ClientRestartGame { ... }
 
 export type ClientMessage =
   | ClientCreateGame
   | ClientJoinGame
   | ClientStartGame
-  | ClientFlipCard
-  | ClientRestartGame;
+  | ClientFlipCard;
+// | ClientRestartGame;
 
 type Listener = (data: any) => void;
 type ListenersMap = Map<string, Listener[]>;
@@ -182,7 +135,6 @@ class GameWebSocketService {
   send(message: ClientMessage): void {
     this.messageQueue.push(message);
     this.ensureConnected();
-    this.flushQueue();
   }
 
   /**
@@ -207,7 +159,6 @@ class GameWebSocketService {
     const message: ClientCreateGame = {
       type: 'CreateGame',
     };
-    // this.currentRoomId = roomId;
     this.send(message);
   }
 
@@ -231,7 +182,7 @@ class GameWebSocketService {
 
     const message: ClientStartGame = {
       type: 'StartGame',
-      roomId: this.currentRoomId,
+      room_id: this.currentRoomId,
     };
     this.send(message);
   }
@@ -244,8 +195,8 @@ class GameWebSocketService {
 
     const message: ClientFlipCard = {
       type: 'FlipCard',
-      roomId: this.currentRoomId,
-      cardIndex,
+      room_id: this.currentRoomId,
+      card_id: cardIndex,
     };
     this.send(message);
   }
@@ -253,32 +204,21 @@ class GameWebSocketService {
   /**
    * Перезапустить игру
    */
-  restartGame(): void {
-    if (!this.currentRoomId) return;
-
-    const message: ClientRestartGame = {
-      type: 'RestartGame',
-      roomId: this.currentRoomId,
-    };
-    this.send(message);
-  }
+  // restartGame(): void {
+  //   if (!this.currentRoomId) return;
+  //   const message: ClientRestartGame = {
+  //     type: 'RestartGame',
+  //     roomId: this.currentRoomId,
+  //   };
+  //   this.send(message);
+  // }
 
   // === Геттеры ===
-
   getCurrentRoomId(): string | null {
     return this.currentRoomId;
   }
-
-  setCurrentRoomId(roomId: string): void {
-    this.currentRoomId = roomId;
-  }
-
   getCurrentPlayerId(): number | null {
     return this.currentPlayerId;
-  }
-
-  setCurrentPlayerId(playerId: number): void {
-    this.currentPlayerId = playerId;
   }
 
   // === Внутренние методы ===
@@ -344,13 +284,15 @@ class GameWebSocketService {
     this.messageQueue.forEach((msg) => {
       this.socket!.send(JSON.stringify(msg));
     });
-    this.messageQueue = [];
+    this.messageQueue = []; // ✅ Очищаем только после отправки
   }
 
   private emit(event: string, data?: any): void {
     const listeners = this.listeners.get(event);
     if (listeners) {
-      listeners.forEach((cb) => cb(data));
+      listeners.forEach((cb) => {
+        cb(data);
+      });
     }
   }
 

@@ -1,12 +1,18 @@
 import React, { useEffect } from 'react';
-import { useSnapshot } from 'valtio';
+import { useSnapshot, type Snapshot } from 'valtio';
 import { Clock, Copy, Circle } from 'lucide-react';
-import { multiGameState, multiGameActions } from '../../state/multi-game';
+import {
+  multiGameState,
+  multiGameActions,
+  type MultiPlayerGameState,
+} from '../../state/multi-game';
 import { appState } from '../../state/state';
-import { gameProxy, initGameStore } from '../../state/ws';
+import { initGameStore } from '../../state/ws';
 import { SIZE, VALUE_SIZE } from '../../constants/sizeGame';
 import UserPanel from './Multi/UserPanel';
 import ConnectStatus from './Multi/ConnectStatus';
+import Errors from './Multi/Errors';
+import PlayerInfo from './Multi/PlayerInfo';
 
 const gridFileds = (size: SIZE) => {
   const cells = VALUE_SIZE[size] / 2;
@@ -19,17 +25,23 @@ const gridFileds = (size: SIZE) => {
   return style[cells];
 };
 
+const playerCells = (snap: Snapshot<MultiPlayerGameState>, player: number) => {
+  return snap.cards.filter(
+    (card) => card.flippedBy === player && card.isMatched,
+  ).length;
+};
+
 const MultiGamePage: React.FC = () => {
-  const snap = useSnapshot(multiGameState);
+  const snapMulti = useSnapshot(multiGameState);
   const app = useSnapshot(appState);
-  const gameWs = useSnapshot(gameProxy);
+
+  // const { gameId } = useParams();
 
   // Инициализация WebSocket и игры
   useEffect(() => {
     if (app.changeSize) return;
 
     multiGameActions.initializeGame();
-    // multiGameActions.generateRoomId();
 
     // Инициализируем WebSocket соединение
     const cleanup = initGameStore();
@@ -38,39 +50,35 @@ const MultiGamePage: React.FC = () => {
 
   // Таймер
   useEffect(() => {
-    if (!snap.gameStarted || snap.gameOver || snap.timeLeft <= 0) return;
+    if (!snapMulti.gameStarted || snapMulti.gameOver || snapMulti.timeLeft <= 0)
+      return;
 
     const timer = setTimeout(() => {
       multiGameActions.updateTimer();
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [snap.timeLeft, snap.gameStarted, snap.gameOver]);
+  }, [snapMulti.timeLeft, snapMulti.gameStarted, snapMulti.gameOver]);
 
   // Копирование ID комнаты в буфер обмена
   const copyRoomId = () => {
-    navigator.clipboard.writeText(snap.roomId);
+    navigator.clipboard.writeText(snapMulti.roomId);
   };
 
-  // Подсчет занятых ячеек для каждого игрока
-  const player1Cells = snap.cards.filter(
-    (card) => card.flippedBy === 1 && card.isMatched,
-  ).length;
-  const player2Cells = snap.cards.filter(
-    (card) => card.flippedBy === 2 && card.isMatched,
-  ).length;
+  // useEffect(() => {
+  //   if (gameId) {
+  //     gameProxy.joinGame(gameId);
+  //     return;
+  //   }
+  // }, [gameId]);
 
-  useEffect(() => {
-    if (snap.roomId) gameProxy.joinGame(snap.roomId);
-  }, [snap.roomId]);
+  // if (!snapMulti.roomId || !gameId) return <>loading...</>;
 
   return (
     <>
       <div className='relative w-full max-w-7xl h-[90vh] flex'>
-        {/* Кнопка возврата */}
-
         {/* Player 1 - Left Panel */}
-        <UserPanel cells={player1Cells} index={0} team='Red' />
+        <UserPanel cells={playerCells(snapMulti, 1)} index={0} team='Red' />
 
         {/* Center Game Area */}
         <div className='w-3/4 bg-slate-800/50 backdrop-blur-md border-y border-white/20 p-6 flex flex-col'>
@@ -83,7 +91,9 @@ const MultiGamePage: React.FC = () => {
             </h1>
             <div className='flex items-center justify-center space-x-2'>
               <span className='text-gray-300'>Room:</span>
-              <span className='text-purple-400 font-mono'>{snap.roomId}</span>
+              <span className='text-purple-400 font-mono'>
+                {snapMulti.roomId}
+              </span>
               <button
                 onClick={copyRoomId}
                 className='p-1 text-gray-400 hover:text-white transition-colors'
@@ -94,54 +104,35 @@ const MultiGamePage: React.FC = () => {
             </div>
 
             {/* Информация об игроках */}
-            {multiGameState.roomId && (
-              <div className='flex items-center justify-center space-x-4 text-sm'>
-                <span className='text-gray-300'>
-                  Players: {gameWs.playersCount}/2
-                </span>
-                {gameWs.playerId && (
-                  <span className='text-blue-400'>
-                    You are Player {gameWs.playerId}
-                  </span>
-                )}
-              </div>
-            )}
+            <PlayerInfo roomId={snapMulti.roomId} />
 
             {/* Ошибки */}
-            {gameWs.error && (
-              <div className='mt-2 p-2 bg-red-500/20 border border-red-500/30 rounded-lg'>
-                <span className='text-red-400 text-sm'>{gameWs.error}</span>
-                <button
-                  onClick={gameProxy.clearError}
-                  className='ml-2 text-red-400 hover:text-red-300'
-                >
-                  ×
-                </button>
-              </div>
-            )}
+            <Errors />
           </div>
 
           <div className='flex items-center justify-center mb-6 bg-slate-700/30 rounded-xl p-4'>
             <div className='flex items-center space-x-2 mr-6'>
               <Clock className='w-5 h-5 text-purple-400' />
-              <span className='text-white'>Time: {snap.timeLeft}s</span>
+              <span className='text-white'>Time: {snapMulti.timeLeft}s</span>
             </div>
 
             <div className='text-white'>
               Current Player:{' '}
               <span
                 className={
-                  snap.currentPlayer === 1 ? 'text-red-400' : 'text-blue-400'
+                  snapMulti.currentPlayer === 1
+                    ? 'text-red-400'
+                    : 'text-blue-400'
                 }
               >
-                Player {snap.currentPlayer}
+                Player {snapMulti.currentPlayer}
               </span>
             </div>
           </div>
 
           {/* Game board */}
           <div className={gridFileds(app.size)}>
-            {snap.cards.map((card, index) => {
+            {snapMulti.cards.map((card, index) => {
               const isPlayer1Card = card.flippedBy === 1;
               const isPlayer2Card = card.flippedBy === 2;
 
@@ -194,20 +185,26 @@ const MultiGamePage: React.FC = () => {
           <div className='text-center mb-6'>
             <div
               className={`inline-flex items-center space-x-2 px-4 py-2 rounded-full ${
-                snap.currentPlayer === 1 ? 'bg-red-500/20' : 'bg-blue-500/20'
+                snapMulti.currentPlayer === 1
+                  ? 'bg-red-500/20'
+                  : 'bg-blue-500/20'
               }`}
             >
               <Circle
                 className={`w-3 h-3 ${
-                  snap.currentPlayer === 1 ? 'fill-red-400' : 'fill-blue-400'
+                  snapMulti.currentPlayer === 1
+                    ? 'fill-red-400'
+                    : 'fill-blue-400'
                 } animate-pulse`}
               />
               <span
                 className={`font-semibold ${
-                  snap.currentPlayer === 1 ? 'text-red-400' : 'text-blue-400'
+                  snapMulti.currentPlayer === 1
+                    ? 'text-red-400'
+                    : 'text-blue-400'
                 }`}
               >
-                Player {snap.currentPlayer}'s Turn
+                Player {snapMulti.currentPlayer}'s Turn
               </span>
               <span className='text-white'>- Active</span>
             </div>
@@ -232,7 +229,7 @@ const MultiGamePage: React.FC = () => {
                   Join Game
                 </button>
               </div>
-              ) : !snap.gameStarted ? (
+              ) : !snapMulti.gameStarted ? (
               <div className="space-x-3">
                 <button
                   onClick={gameProxy.startGame}
@@ -249,12 +246,12 @@ const MultiGamePage: React.FC = () => {
                   </p>
                 )}
               </div>
-            ) : snap.gameOver ? (
+            ) : snapMulti.gameOver ? (
               <div>
                 <h2 className="text-2xl font-bold text-white mb-4">
-                  {snap.winner === "draw"
+                  {snapMulti.winner === "draw"
                     ? "It's a draw!"
-                    : `Player ${snap.winner} wins!`}
+                    : `Player ${snapMulti.winner} wins!`}
                 </h2>
                 <button
                   onClick={gameProxy.restartGame}
@@ -281,19 +278,19 @@ const MultiGamePage: React.FC = () => {
           </div>*/}
 
           <div className='text-center mt-auto'>
-            {!snap.gameStarted ? (
+            {!snapMulti.gameStarted ? (
               <button
                 onClick={multiGameActions.startGame}
                 className='px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-xl font-medium transition-all duration-200'
               >
                 Start Game
               </button>
-            ) : snap.gameOver ? (
+            ) : snapMulti.gameOver ? (
               <div>
                 <h2 className='text-2xl font-bold text-white mb-4'>
-                  {snap.winner === 'draw'
+                  {snapMulti.winner === 'draw'
                     ? "It's a draw!"
-                    : `Player ${snap.winner} wins!`}
+                    : `Player ${snapMulti.winner} wins!`}
                 </h2>
                 <button
                   // onClick={gameProxy.restartGame}
@@ -323,7 +320,7 @@ const MultiGamePage: React.FC = () => {
         </div>
 
         {/* Player 2 - Right Panel */}
-        <UserPanel cells={player2Cells} index={1} team='Blue' />
+        <UserPanel cells={playerCells(snapMulti, 2)} index={1} team='Blue' />
       </div>
     </>
   );

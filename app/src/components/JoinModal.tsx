@@ -3,9 +3,18 @@ import { Users, X, Hash } from 'lucide-react';
 import ModalContainer from './ModalContainer';
 import { useSnapshot } from 'valtio';
 import { appState, actions } from '../state/state';
+import { useNavigate } from 'react-router-dom';
 
 const JoinModal: React.FC = () => {
+  const navigate = useNavigate();
   const snap = useSnapshot(appState);
+
+  const onSubmitHandler = (e: React.FormEvent) => {
+    e.preventDefault();
+    actions.handleJoinSubmit(e);
+
+    navigate(`/game/${snap.joinCode}`, { state: { players: 2 } });
+  };
 
   return (
     <ModalContainer onClose={actions.closeModal}>
@@ -25,7 +34,7 @@ const JoinModal: React.FC = () => {
           </button>
         </div>
 
-        <form onSubmit={(e) => actions.handleJoinSubmit(e)} className='p-6'>
+        <form onSubmit={onSubmitHandler} className='p-6'>
           <div className='mb-6'>
             <label
               htmlFor='joinCode'
